@@ -16,7 +16,10 @@ setup(
     long_description_content_type='text/markdown',
     url='https://pypi.org/project/dm-aiomqtt',
     packages=find_packages(),
-    install_requires=[],
+    install_requires=[
+        'dm-logger==0.4.2',
+        'aiomqtt==2.0.0'
+    ],
     classifiers=[
         'Programming Language :: Python :: 3.8',
         'License :: OSI Approved :: MIT License',
