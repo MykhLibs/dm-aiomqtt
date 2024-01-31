@@ -1,4 +1,4 @@
-from dm_logger import DMLogger
+from dm_logger import DMLoggerBuilder
 from typing import Union, Callable, Coroutine, Literal
 import asyncio
 import aiomqtt
@@ -27,7 +27,7 @@ class DMAioMqttClient:
 
     def __init__(self, host: str, port: int, username: str = "", password: str = "") -> None:
         if self.__info_fn is None or self.__error_fn is None:
-            logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
+            logger = DMLoggerBuilder.create(f"DMAioMqttClient-{host}:{port}")
 
             if self.__info_fn is None:
                 self.__info_fn = logger.info
