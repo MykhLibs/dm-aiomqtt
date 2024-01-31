@@ -15,17 +15,11 @@ class DMAioMqttClient:
     _LOG_FN_TYPE = Callable[[str], None]
     _QOS_TYPE = Literal[0, 1, 2]
 
-    __info_fn: _LOG_FN_TYPE = None
-    __error_fn: _LOG_FN_TYPE = None
+    __logger = None
 
     def __init__(self, host: str, port: int, username: str = "", password: str = "") -> None:
-        if self.__info_fn is None or self.__error_fn is None:
-            logger = DMLoggerBuilder.create(f"DMAioMqttClient-{host}:{port}")
-
-            if self.__info_fn is None:
-                self.__info_fn = logger.info
-            if self.__error_fn is None:
-                self.__error_fn = logger.error
+        if self.__logger is None:
+            self.__logger = DMLoggerBuilder.create(f"DMAioMqttClient-{host}:{port}")
 
         self.__connection_config = {
             "hostname": host,
@@ -121,16 +115,11 @@ class DMAioMqttClient:
             self.__info(f"Published message to '{topic}' topic ({qos=}): {payload}")
 
     @classmethod
-    def set_log_functions(cls, *, info_logs: _LOG_FN_TYPE = None, err_logs: _LOG_FN_TYPE = None) -> None:
-        if isinstance(info_logs, Callable):
-            cls.__info_fn = info_logs
-        if isinstance(err_logs, Callable):
-            cls.__error_fn = err_logs
-
-    def __info(self, message: str) -> None:
-        if self.__info_fn is not None:
-            self.__info_fn(message)
-
-    def __error(self, message: str) -> None:
-        if self.__error_fn is not None:
-            self.__error_fn(message)
+    def set_log_functions(cls, logger) -> None:
+        if (hasattr(logger, "info") and isinstance(logger.info, Callable) and
+            hasattr(logger, "warning") and isinstance(logger.warning, Callable) and
+            hasattr(logger, "error") and isinstance(logger.error, Callable)
+        ):
+            cls.__logger = logger
+        else:
+            print("Invalid logger")
