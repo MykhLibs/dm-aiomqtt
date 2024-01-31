@@ -17,13 +17,6 @@ class DMAioMqttClient:
 
     __info_fn: _LOG_FN_TYPE = None
     __error_fn: _LOG_FN_TYPE = None
-    __instances: dict = {}
-
-    def __new__(cls, host: str, port: int, username: str = "", password: str = "", *args, **kwargs):
-        key = (host, port, username, password)
-        if key not in cls.__instances:
-            cls.__instances[key] = super().__new__(cls)
-        return cls.__instances[key]
 
     def __init__(self, host: str, port: int, username: str = "", password: str = "") -> None:
         if self.__info_fn is None or self.__error_fn is None:
