@@ -107,3 +107,24 @@ if __name__ == "__main__":
    if __name__ == "__main__":
        asyncio.run(start())
    ```
+
+### Set custom log functions
+
+_If you want set up custom log functions or disable existing ones_
+
+```python
+from dm_aiomqtt import DMAioMqttClient
+
+
+# create custom error log function
+def my_error_fn(message: str):
+   print(f"------\n{message}\n-----")
+
+# set up custom log functions
+DMAioMqttClient.set_log_functions(info_logs=print, err_logs=my_error_fn)
+
+# create client
+mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
+
+# other code
+```

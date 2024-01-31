@@ -12,25 +12,36 @@ class DMAioMqttClient:
         https://github.com/DIMKA4621/dm-aiomqtt
     """
     _CALLBACK_TYPE = Callable[["DMAioMqttClient", str, str], Coroutine]
+    _LOG_FN_TYPE = Callable[[str], None]
     _QOS_TYPE = Literal[0, 1, 2]
 
-    __logger = DMLogger("DMAioMqttClient")
-    __instances = {}
+    __info_fn: _LOG_FN_TYPE = None
+    __error_fn: _LOG_FN_TYPE = None
+    __instances: dict = {}
 
-    def __new__(cls, host: str, port: int, username: str = None, password: str = None, *args, **kwargs):
+    def __new__(cls, host: str, port: int, username: str = "", password: str = "", *args, **kwargs):
         key = (host, port, username, password)
         if key not in cls.__instances:
             cls.__instances[key] = super().__new__(cls)
         return cls.__instances[key]
 
-    def __init__(self, host: str, port: int, username: str = None, password: str = None) -> None:
+    def __init__(self, host: str, port: int, username: str = "", password: str = "") -> None:
+        if self.__info_fn is None or self.__error_fn is None:
+            logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
+
+            if self.__info_fn is None:
+                self.__info_fn = logger.info
+            if self.__error_fn is None:
+                self.__error_fn = logger.error
+
         self.__connection_config = {
             "hostname": host,
             "port": port,
-            "username": username,
-            "password": password,
         }
-        self._info = f"{host}:{port}"
+        if username or password:
+            self.__connection_config["username"] = username
+            self.__connection_config["password"] = password
+
         self.__subscribes = {}
         self.__client = None
 
@@ -51,31 +62,31 @@ class DMAioMqttClient:
                 self.__client = None
             else:
                 await callback()
-        except Exception as e:
+        except aiomqtt.exceptions.MqttError as e:
             err_msg = f"Connection error: {e}."
             if reconnect:
-                self.__logger.error(f"{err_msg}\nReconnecting in {interval} seconds...", info=self._info)
+                self.__error(f"{err_msg}\nReconnecting in {interval} seconds...")
                 self.__client = None
                 await asyncio.sleep(interval)
                 await self.__execute(callback, reconnect, interval)
             else:
-                self.__logger.error(f"{err_msg}", info=self._info)
+                self.__error(f"{err_msg}")
 
     async def listen(self, *, reconnect_interval: int = 10) -> None:
         async def callback() -> None:
-            self.__logger.info("Connected to mqtt broker!", info=self._info)
+            self.__info("Connected to mqtt broker!")
 
             for topic, params in self.__subscribes.items():
                 _, qos = params.values()
                 await self.__client.subscribe(topic, qos)
-                self.__logger.debug(f"Subscribe to '{topic}' topic ({qos=})", info=self._info)
+                self.__info(f"Subscribe to '{topic}' topic ({qos=})")
 
             await self.__message_handler()
 
         await self.__execute(callback, reconnect=True, interval=reconnect_interval)
 
     async def __message_handler(self) -> None:
-        self.__logger.info("Listening...", info=self._info)
+        self.__info("Listening...")
         async for message in self.__client.messages:
             topic = message.topic.value
             payload = message.payload.decode('utf-8')
@@ -86,8 +97,7 @@ class DMAioMqttClient:
                 if isinstance(callback, Callable):
                     await callback(self, topic, payload)
                 else:
-                    self.__logger.error(f"Callback is not a Callable object: {type(callback)}, {topic=}",
-                                        info=self._info)
+                    self.__error(f"Callback is not a Callable object: {type(callback)}, {topic=}")
 
     async def publish(
         self,
@@ -115,4 +125,19 @@ class DMAioMqttClient:
 
         await self.__execute(callback)
         if logging:
-            self.__logger.debug(f"Published message to '{topic}' topic ({qos=}): {payload}", info=self._info)
+            self.__info(f"Published message to '{topic}' topic ({qos=}): {payload}")
+
+    @classmethod
+    def set_log_functions(cls, *, info_logs: _LOG_FN_TYPE = None, err_logs: _LOG_FN_TYPE = None) -> None:
+        if isinstance(info_logs, Callable):
+            cls.__info_fn = info_logs
+        if isinstance(err_logs, Callable):
+            cls.__error_fn = err_logs
+
+    def __info(self, message: str) -> None:
+        if self.__info_fn is not None:
+            self.__info_fn(message)
+
+    def __error(self, message: str) -> None:
+        if self.__error_fn is not None:
+            self.__error_fn(message)
