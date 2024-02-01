@@ -17,7 +17,7 @@ setup(
     url='https://pypi.org/project/dm-aiomqtt',
     packages=find_packages(),
     install_requires=[
-        'dm-logger==0.5.0',
+        'dm-logger==0.5.1',
         'aiomqtt==2.0.0'
     ],
     classifiers=[
