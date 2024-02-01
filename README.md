@@ -19,7 +19,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 ```
 
-### Listen
+### One connection for all actions
 
 ```python
 from dm_aiomqtt import DMAioMqttClient
@@ -27,104 +27,82 @@ import asyncio
 
 
 # create handler for 'test' topic
-async def test_handler(client: DMAioMqttClient, topic: str, payload: str) -> None:
-   print(f"Received message from {topic}: {payload}")
-   await client.publish("test/success", payload=True)
+async def test_topic_handler(publish: DMAioMqttClient.publish, topic: str, payload: str) -> None:
+    print(f"Received message from {topic}: {payload}")
+    publish("test/success", payload=True)
 
 
 async def main():
-   # create client
-   mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
+    # create client
+    mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
 
-   # add handler for 'test' topic
-   mqtt_client.add_handler("test", test_handler)
+    # add handler for 'test' topic
+    await mqtt_client.add_topic_handler("test", test_topic_handler)
 
-   # start listening (this operation is block async thread)
-   await mqtt_client.listen()
+    # start connection
+    await mqtt_client.connect()
+
+    # publish
+    mqtt_client.publish("test", payload="Hello World!", logging=True)
+
+    # other code (for example, endless waiting)
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-   asyncio.run(main())
+    asyncio.run(main())
 ```
 
-### Publish
+### Temporary connection for actions
 
-* Connection only when publishing
+_The `apublish` method is used here to **wait** for messages to be sent_
 
-   ```python
-   from dm_aiomqtt import DMAioMqttClient
-   import asyncio
-
-
-   async def main():
-       # create client
-       mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
-
-       # publish json message
-       await mqtt_client.publish("test", payload={"key": "value"})
-
-       # other code
-
-       # publish new json message
-       await mqtt_client.publish("test2", payload={"key2": "value2"})
+```python
+from dm_aiomqtt import DMAioMqttClient
+import asyncio
 
 
-   if __name__ == "__main__":
-       asyncio.run(main())
-   ```
+async def main():
+    # create client
+    mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
 
-* One connection for all publishing
+    # create callback
+    async def callback(apublish: DMAioMqttClient.apublish):
+        await apublish("test/1", payload="Hello World!1", qos=2, logging=True)
+        # other code
+        await apublish("test/2", payload="Hello World!2", qos=2, logging=True)
 
-   ```python
-   from dm_aiomqtt import DMAioMqttClient
-   import asyncio
+    # execute callback in temporary connection
+    await mqtt_client.temp_connect(callback)
 
-
-   async def main(mqtt_client: DMAioMqttClient):
-       # publish json message
-       await mqtt_client.publish("test", payload={"key": "value"})
-
-       # other code
-
-       # publish new json message
-       await mqtt_client.publish("test2", payload={"key2": "value2"})
+    # other code (for example, endless waiting)
+    await asyncio.Event().wait()
 
 
-   async def start():
-       # create client
-       mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
-       # create task for listening (this operation is block async thread)
-       listen_task = asyncio.create_task(mqtt_client.listen(reconnect_interval=5))
+### Set custom logger
 
-       # create task to execute other code with an active connection
-       main_task = asyncio.create_task(main(mqtt_client))
-
-       # run async tasks in parallel
-       await asyncio.gather(listen_task, main_task)
-
-
-   if __name__ == "__main__":
-       asyncio.run(start())
-   ```
-
-### Set custom log functions
-
-_If you want set up custom log functions or disable existing ones_
+_If you want set up custom logger_
 
 ```python
 from dm_aiomqtt import DMAioMqttClient
 
 
-# create custom error log function
-def my_error_fn(message: str):
-   print(f"------\n{message}\n-----")
+# create custom logger
+class MyLogger:
+    def info(self, message):
+       pass
 
-# set up custom log functions
-DMAioMqttClient.set_log_functions(info_logs=print, err_logs=my_error_fn)
+    def warning(self, message):
+       print(message)
 
-# create client
-mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
+    def error(self, message):
+       print(message)
 
-# other code
+
+# set up custom logger for all clients
+DMAioMqttClient.set_logger(MyLogger())
 ```
