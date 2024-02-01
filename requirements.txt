@@ -1,3 +1,3 @@
 # Python 3.8
-dm-logger==0.5.1
+dm-logger==0.5.2
 aiomqtt==2.0.0
