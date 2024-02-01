@@ -17,7 +17,7 @@ class DMAioMqttClient:
     _QOS_TYPE = Literal[0, 1, 2]
 
     """If reconnect_interval=None, reconnection will not occur"""
-    reconnect_interval: Optional[int] = 10
+    reconnect_interval: Optional[int] = 30
     __logger = None
 
     def __init__(self, host: str, port: int, username: str = "", password: str = "") -> None:
