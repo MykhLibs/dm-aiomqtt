@@ -40,7 +40,7 @@ class DMAioMqttClient:
         callback EXAMPLE:
             async def test_topic_handler(publish: DMAioMqttClient.publish, topic: str, payload: str) -> None:
                print(f"Received message from {topic}: {payload}")
-               publish("test/success", payload=True)
+               await publish("test/success", payload=True)
         """
         new_item = {"cb": callback, "qos": qos}
         self.__subscribes[topic] = new_item
@@ -64,9 +64,9 @@ class DMAioMqttClient:
     async def temp_connect(self, callback: _TEMP_CALLBACK_TYPE) -> None:
         """
         callback EXAMPLE:
-            async def temp_callback(apublish: DMAioMqttClient.apublish) -> None:
-                await apublish("test/1", payload="Hello World!1")
-                await apublish("test/2", payload="Hello World!2")
+            async def temp_callback(publish: DMAioMqttClient.publish) -> None:
+                await publish("test/1", payload="Hello World!1")
+                await publish("test/2", payload="Hello World!2")
         """
         if not isinstance(callback, Callable):
             self.__logger.error(f"Callback is not a Callable object: {type(callback)}")
@@ -79,7 +79,7 @@ class DMAioMqttClient:
             self.__client = aiomqtt.Client(**self.__connection_config)
             await self.__client.__aenter__()
             self.__logger.info("Connected to mqtt broker!")
-            await callback(self.apublish)
+            await callback(self.publish)
             await self.disconnect()
 
         await self.__handle_connection_errors(coroutine())
@@ -114,19 +114,7 @@ class DMAioMqttClient:
 
         await self.__handle_connection_errors(coroutine())
 
-    def publish(
-        self,
-        topic: str,
-        payload: Union[str, int, float, dict, list, bool, None],
-        qos: _QOS_TYPE = 0,
-        *,
-        payload_to_json: Union[bool, Literal["auto"]] = "auto",
-        logging: bool = False
-    ) -> None:
-        task = self.apublish(topic, payload, qos, payload_to_json=payload_to_json, logging=logging)
-        _ = asyncio.create_task(task)
-
-    async def apublish(
+    async def publish(
         self,
         topic: str,
         payload: Union[str, int, float, dict, list, bool, None],

@@ -29,7 +29,7 @@ import asyncio
 # create handler for 'test' topic
 async def test_topic_handler(publish: DMAioMqttClient.publish, topic: str, payload: str) -> None:
     print(f"Received message from {topic}: {payload}")
-    publish("test/success", payload=True)
+    await publish("test/success", payload=True)
 
 
 async def main():
@@ -43,7 +43,7 @@ async def main():
     await mqtt_client.connect()
 
     # publish
-    mqtt_client.publish("test", payload="Hello World!", logging=True)
+    await mqtt_client.publish("test", payload="Hello World!", logging=True)
 
     # other code (for example, endless waiting)
     await asyncio.Event().wait()
@@ -55,8 +55,6 @@ if __name__ == "__main__":
 
 ### Temporary connection for actions
 
-_The `apublish` method is used here to **wait** for messages to be sent_
-
 ```python
 from dm_aiomqtt import DMAioMqttClient
 import asyncio
@@ -67,10 +65,10 @@ async def main():
     mqtt_client = DMAioMqttClient("localhost", 1883, "username", "password")
 
     # create callback
-    async def callback(apublish: DMAioMqttClient.apublish):
-        await apublish("test/1", payload="Hello World!1", qos=2, logging=True)
+    async def callback(publish: DMAioMqttClient.publish):
+        await publish("test/1", payload="Hello World!1", qos=2, logging=True)
         # other code
-        await apublish("test/2", payload="Hello World!2", qos=2, logging=True)
+        await publish("test/2", payload="Hello World!2", qos=2, logging=True)
 
     # execute callback in temporary connection
     await mqtt_client.temp_connect(callback)
