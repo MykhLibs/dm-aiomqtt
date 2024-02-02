@@ -17,7 +17,8 @@ class DMAioMqttClient:
     _QOS_TYPE = Literal[0, 1, 2]
 
     """If reconnect_interval=None, reconnection will not occur"""
-    reconnect_interval: Optional[int] = 30
+    reconnect_interval: Optional[int] = 10
+    keepalive: int = 10
     __logger = None
 
     def __init__(self, host: str, port: int, username: str = "", password: str = "") -> None:
@@ -27,6 +28,7 @@ class DMAioMqttClient:
         self.__connection_config = {
             "hostname": host,
             "port": port,
+            "keepalive": self.keepalive,
         }
         if username or password:
             self.__connection_config["username"] = username
@@ -34,6 +36,7 @@ class DMAioMqttClient:
 
         self.__subscribes = {}
         self.__client = None
+        self.__wait_for_reconnect = False
 
     async def add_topic_handler(self, topic: str, callback: _SUBSCRIBE_CALLBACK_TYPE, qos: _QOS_TYPE = 0) -> None:
         """
@@ -149,15 +152,21 @@ class DMAioMqttClient:
     async def __handle_connection_errors(self, coroutine: Coroutine):
         try:
             await coroutine
+            self.__wait_for_reconnect = False
         except aiomqtt.exceptions.MqttError as e:
             err_msg = f"Connection error: {e}."
             if self.reconnect_interval is None:
                 self.__logger.error(err_msg)
                 self.__client = None
             else:
-                self.__logger.error(f"{err_msg}\nReconnecting in {self.reconnect_interval} seconds...")
                 self.__client = None
-                await asyncio.sleep(self.reconnect_interval)
+                if self.__wait_for_reconnect:
+                    self.__logger.error(f"{err_msg}\nReconnecting in {self.reconnect_interval} seconds...")
+                    await asyncio.sleep(self.reconnect_interval)
+                else:
+                    self.__logger.error(f"{err_msg}\nReconnecting...")
+                    await asyncio.sleep(1)
+                    self.__wait_for_reconnect = True
                 await self.connect()
         except Exception as e:
             self.__logger.error(f"Error: {e}")
