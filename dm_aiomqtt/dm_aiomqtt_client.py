@@ -48,7 +48,7 @@ class DMAioMqttClient:
         self.__reconnect_timer_task = None
         self.__is_reconnect = False
         self.__subscribes = {}
-        self.__ping_topic = f"ping/{uuid.uuid4()}"
+        self.__ping_topic = f"ping/{self.__mqtt_config['identifier']}"
         self.add_topic_handler(self.__ping_topic, self.__reset_reconnect_timer_task)
         self.__client: aiomqtt.Client = None
 
@@ -162,7 +162,7 @@ class DMAioMqttClient:
         for topic, params in self.__subscribes.items():
             _, qos = params.values()
             await self.__client.subscribe(topic, qos)
-            self.__logger.info(f"Subscribe to '{topic}' topic ({qos=})")
+            self.__logger.debug(f"Subscribe to '{topic}' topic ({qos=})")
 
     @classmethod
     def set_logger(cls, logger) -> None:
