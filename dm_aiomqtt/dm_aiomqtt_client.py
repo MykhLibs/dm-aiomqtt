@@ -25,7 +25,8 @@ class DMAioMqttClient:
         port: int,
         username: str = "",
         password: str = "",
-        ping_interval_s: float = 5
+        ping_interval_s: int = 5,
+        clean_session: bool = True
     ) -> None:
         if self.__logger is None:
             self.__logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
@@ -35,34 +36,37 @@ class DMAioMqttClient:
         self.__mqtt_config = {
             "hostname": host,
             "port": port,
-            "keepalive": self.__ping_interval_s * 3
+            "keepalive": self.__ping_interval_s * 3,
+            "clean_session": clean_session,
+            "identifier": str(uuid.uuid4())
         }
         if username or password:
             self.__mqtt_config["username"] = username
             self.__mqtt_config["password"] = password
 
-        self.__ping_topic = f"ping/{uuid.uuid4()}"
-        self.__is_connected = False
-        self.__is_listen_error = False
+        self.__reconnect_timeout = self.__ping_interval_s * 2 + 1
+        self.__reconnect_timer_task = None
+        self.__is_reconnect = False
         self.__subscribes = {}
-        self.add_topic_handler(self.__ping_topic, self.__on_health_callback)
+        self.__ping_topic = f"ping/{uuid.uuid4()}"
+        self.add_topic_handler(self.__ping_topic, self.__reset_reconnect_timer_task)
         self.__client: aiomqtt.Client = None
 
     async def start(self) -> None:
         await self.__connect_loop()
-        _ = asyncio.create_task(self.__reconnect_handler())
-        _ = asyncio.create_task(self.__health_handler())
+        _ = asyncio.create_task(self.__ping_loop())
 
     async def __connect(self) -> None:
         self.__client = aiomqtt.Client(**self.__mqtt_config)
         await self.__client.__aenter__()
-        self.__is_listen_error = False
         self.__logger.info("Connected!")
 
     async def __connect_loop(self) -> None:
         while True:
             try:
                 await self.__connect()
+                self.__is_reconnect = False
+                self.__reconnect_timer_task = asyncio.create_task(self.__reconnect_timer())
                 await self.__subscribe()
                 _ = asyncio.create_task(self.__listen())
                 return
@@ -76,6 +80,44 @@ class DMAioMqttClient:
         except:
             pass
 
+    async def __reconnect(self) -> None:
+        self.__reconnect_timer_task.cancel()
+        if self.__is_reconnect:
+            return
+        self.__is_reconnect = True
+        await self.__disconnect()
+        await self.__connect_loop()
+
+    async def __reset_reconnect_timer_task(self, *args, **kwargs) -> None:
+        self.__reconnect_timer_task.cancel()
+        self.__reconnect_timer_task = asyncio.create_task(self.__reconnect_timer())
+
+    async def __reconnect_timer(self) -> None:
+        await asyncio.sleep(self.__reconnect_timeout)
+        await self.__reconnect()
+
+    async def __ping_loop(self) -> None:
+        while True:
+            await self.publish(self.__ping_topic, 1)
+            await asyncio.sleep(self.__ping_interval_s)
+
+    async def __listen(self) -> None:
+        try:
+            async for message in self.__client.messages:
+                topic = message.topic.value
+                payload = message.payload.decode('utf-8')
+
+                topic_params = self.__subscribes.get(topic)
+                if isinstance(topic_params, dict):
+                    callback = topic_params["cb"]
+                    if isinstance(callback, Callable):
+                        _ = asyncio.create_task(callback(self.publish, topic, payload))
+                    else:
+                        self.__logger.error(f"Callback is not a Callable object: {type(callback)}, {topic=}")
+        except Exception as e:
+            self.__logger.error(f"Connection error: {e}")
+            await self.__reconnect()
+
     async def publish(
         self,
         topic: str,
@@ -84,7 +126,7 @@ class DMAioMqttClient:
         *,
         payload_to_json: Union[bool, Literal["auto"]] = "auto",
         sent_logging: bool = False,
-        not_sent_logging: bool = False,
+        warn_logging: bool = False,
     ) -> None:
         """
         payload_to_json (bool, "auto"):
@@ -100,7 +142,7 @@ class DMAioMqttClient:
         try:
             await self.__client.publish(topic, payload, qos)
         except Exception as e:
-            if not_sent_logging:
+            if warn_logging:
                 self.__logger.warning(f"Publish not sent: {e}")
         else:
             if sent_logging:
@@ -121,49 +163,6 @@ class DMAioMqttClient:
             _, qos = params.values()
             await self.__client.subscribe(topic, qos)
             self.__logger.info(f"Subscribe to '{topic}' topic ({qos=})")
-
-    async def __listen(self) -> None:
-        try:
-            async for message in self.__client.messages:
-                topic = message.topic.value
-                payload = message.payload.decode('utf-8')
-
-                topic_params = self.__subscribes.get(topic)
-                if isinstance(topic_params, dict):
-                    callback = topic_params["cb"]
-                    if isinstance(callback, Callable):
-                        _ = asyncio.create_task(callback(self.publish, topic, payload))
-                    else:
-                        self.__logger.error(f"Callback is not a Callable object: {type(callback)}, {topic=}")
-        except Exception as e:
-            self.__is_connected = False
-            self.__is_listen_error = True
-            self.__logger.error(f"Connection error: {e}")
-
-    async def __on_health_callback(self, *args, **kwargs) -> None:
-        self.__is_connected = True
-
-    async def __health_handler(self) -> None:
-        while True:
-            self.__is_connected = False
-            try:
-                await self.__client.publish(self.__ping_topic, 1)
-            except:
-                pass
-            await asyncio.sleep(self.__ping_interval_s)
-
-    async def __reconnect_handler(self) -> None:
-        health_timeout = self.__ping_interval_s * 2 + 1
-        while True:
-            wait_time = 0
-            while not self.__is_connected:
-                if wait_time > health_timeout or self.__is_listen_error:
-                    await self.__disconnect()
-                    await self.__connect_loop()
-                    break
-                await asyncio.sleep(0.01)
-                wait_time += 0.01
-            await asyncio.sleep(0.1)
 
     @classmethod
     def set_logger(cls, logger) -> None:

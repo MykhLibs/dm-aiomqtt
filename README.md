@@ -89,11 +89,11 @@ DMAioMqttClient.set_logger(MyLogger())
 
 ### Publish method parameters
 
-| Parameter          | Type               | Default Value | Description                               |
-|--------------------|--------------------|---------------|-------------------------------------------|
-| `topic`            | `str`              | (required)    | Topic name                                |
-| `payload`          | `str`              | `"DEBUG"`     | Content to send                           |
-| `qos`              | `0` \| `1` \| `2`  | `True`        | MQTT QoS                                  |
-| `payload_to_json`  | `bool` \| `"auto"` | `True`        | Whether to convert content to JSON        |
-| `sent_logging`     | `bool`             | `False`       | Whether to print the sending notification |
-| `not_sent_logging` | `bool`             | `False`       | Whether to print a send error warning     |
+| Parameter         | Type               | Default Value | Description                               |
+|-------------------|--------------------|---------------|-------------------------------------------|
+| `topic`           | `str`              | (required)    | Topic name                                |
+| `payload`         | `str`              | `"DEBUG"`     | Content to send                           |
+| `qos`             | `0` \| `1` \| `2`  | `True`        | MQTT QoS                                  |
+| `payload_to_json` | `bool` \| `"auto"` | `True`        | Whether to convert content to JSON        |
+| `sent_logging`    | `bool`             | `False`       | Whether to print the sending notification |
+| `warn_logging`    | `bool`             | `False`       | Whether to print a send error warning     |
