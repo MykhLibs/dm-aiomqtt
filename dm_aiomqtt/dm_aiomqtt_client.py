@@ -1,9 +1,10 @@
 from dm_logger import DMLogger
-from typing import Union, Callable, Coroutine, Literal
+from typing import Union, Callable, Coroutine, Literal, List
 import asyncio
 import aiomqtt
 import json
 import uuid
+import re
 
 
 class DMAioMqttClient:
@@ -107,9 +108,12 @@ class DMAioMqttClient:
                 topic = message.topic.value
                 payload = message.payload.decode('utf-8')
 
+                callbacks = self.__get_topics_from_pattern(topic)
                 topic_params = self.__subscribes.get(topic)
                 if isinstance(topic_params, dict):
-                    callback = topic_params["cb"]
+                    callbacks.append(topic_params["cb"])
+
+                for callback in callbacks:
                     if isinstance(callback, Callable):
                         _ = asyncio.create_task(callback(self.publish, topic, payload))
                     else:
@@ -117,6 +121,21 @@ class DMAioMqttClient:
         except Exception as e:
             self.__logger.error(f"Connection error: {e}")
             await self.__reconnect()
+
+    def __get_topics_from_pattern(self, current_topic: str) -> List[Callable]:
+        callbacks = []
+        for topic, params in self.__subscribes.items():
+            pattern = None
+            if "+" in topic:
+                pattern = topic.replace("+", "[^/]+?")
+            if "#" in topic:
+                if pattern:
+                    pattern = pattern.replace("/#", "(/.+)*")
+                else:
+                    pattern = topic.replace("/#", "(/.+)*")
+            if pattern is not None and re.search(pattern, current_topic):
+                callbacks.append(params["cb"])
+        return callbacks
 
     async def publish(
         self,
