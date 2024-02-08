@@ -49,6 +49,7 @@ class DMAioMqttClient:
         self.__reconnect_timer_task = None
         self.__is_reconnect = False
         self.__subscribes = {}
+        self.__pattern_subscribes = {}
         self.__ping_topic = f"ping/{self.__mqtt_config['identifier']}"
         self.add_topic_handler(self.__ping_topic, self.__reset_reconnect_timer_task)
         self.__client: aiomqtt.Client = None
@@ -108,7 +109,7 @@ class DMAioMqttClient:
                 topic = message.topic.value
                 payload = message.payload.decode('utf-8')
 
-                callbacks = self.__get_topics_from_pattern(topic)
+                callbacks = self.__get_callbacks_from_pattern_subscribes(topic)
                 topic_params = self.__subscribes.get(topic)
                 if isinstance(topic_params, dict):
                     callbacks.append(topic_params["cb"])
@@ -122,18 +123,15 @@ class DMAioMqttClient:
             self.__logger.error(f"Connection error: {e}")
             await self.__reconnect()
 
-    def __get_topics_from_pattern(self, current_topic: str) -> List[Callable]:
+    def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
+        if current_topic == self.__ping_topic:
+            return []
+
         callbacks = []
-        for topic, params in self.__subscribes.items():
-            pattern = None
-            if "+" in topic:
-                pattern = topic.replace("+", "[^/]+?")
-            if "#" in topic:
-                if pattern:
-                    pattern = pattern.replace("/#", "(/.+)*")
-                else:
-                    pattern = topic.replace("/#", "(/.+)*")
-            if pattern is not None and re.search(pattern, current_topic):
+        for topic, params in self.__pattern_subscribes.items():
+            pattern = topic.replace("+", "[^/]+?")
+            pattern = pattern.replace("/#", "(/.+)*")
+            if re.search(pattern, current_topic):
                 callbacks.append(params["cb"])
         return callbacks
 
@@ -176,6 +174,9 @@ class DMAioMqttClient:
         """
         new_item = {"cb": callback, "qos": qos}
         self.__subscribes[topic] = new_item
+
+        if re.search(r"[+#]", topic):
+            self.__pattern_subscribes[topic] = new_item
 
     async def __subscribe(self) -> None:
         for topic, params in self.__subscribes.items():
