@@ -1,10 +1,12 @@
 from dm_logger import DMLogger
-from typing import Union, Callable, Coroutine, Literal, List
+from typing import Union, Callable, Coroutine, Literal, List, Optional
 import asyncio
 import aiomqtt
 import json
 import uuid
+import ssl
 import re
+import os
 
 
 class DMAioMqttClient:
@@ -26,6 +28,9 @@ class DMAioMqttClient:
         port: int,
         username: str = "",
         password: str = "",
+        ca_crt: str = "",
+        client_crt: str = "",
+        client_key: str = "",
         ping_interval_s: int = 5,
         clean_session: bool = True
     ) -> None:
@@ -44,6 +49,7 @@ class DMAioMqttClient:
         if username or password:
             self.__mqtt_config["username"] = username
             self.__mqtt_config["password"] = password
+        self.__mqtt_config["tls_context"] = self.__get_tls_context(ca_crt, client_crt, client_key)
 
         self.__reconnect_timeout = self.__ping_interval_s * 2 + 1
         self.__reconnect_timer_task = None
@@ -183,6 +189,29 @@ class DMAioMqttClient:
             _, qos = params.values()
             await self.__client.subscribe(topic, qos)
             self.__logger.debug(f"Subscribe to '{topic}' topic ({qos=})")
+
+    def __get_tls_context(self, ca_crt: str, client_crt: str, client_key: str) -> Optional[ssl.SSLContext]:
+        if not ca_crt and (client_crt or client_key):
+            self.__logger.error("ca_crt file is not specified!")
+            return
+
+        if ca_crt:
+            if not os.path.exists(ca_crt):
+                self.__logger.error(f"'ca_crt' file '{ca_crt}' file not found!")
+                return
+            tls_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_crt)
+
+            if client_crt and client_key:
+                if not os.path.exists(client_crt):
+                    self.__logger.error(f"'client_crt' file '{client_crt}' file not found!")
+                elif not os.path.exists(client_key):
+                    self.__logger.error(f"'client_key' file '{client_key}' file not found!")
+                else:
+                    tls_context.load_cert_chain(certfile=client_crt, keyfile=client_key)
+            elif client_crt or client_key:
+                self.__logger.error("'client_crt' or 'client_key' file is not specified!")
+
+            return tls_context
 
     @classmethod
     def set_logger(cls, logger) -> None:

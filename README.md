@@ -60,6 +60,20 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+### TLS connection
+
+* NOT required client certificate
+
+   ```python
+   mqtt_client = DMAioMqttClient("localhost", 8883, ca_file="ca.crt")
+   ```
+
+* REQUIRED client certificate
+
+   ```python
+   mqtt_client = DMAioMqttClient("localhost", 8883, ca_file="ca.crt", client_crt="client.crt", client_key="client.key")
+   ```
+
 ### Set custom logger
 
 _If you want set up custom logger_
