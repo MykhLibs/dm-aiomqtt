@@ -54,6 +54,7 @@ class DMAioMqttClient:
         self.__reconnect_timeout = self.__ping_interval_s * 2 + 1
         self.__reconnect_timer_task = None
         self.__is_reconnect = False
+        self.__reconnect_counter = 0
         self.__subscribes = {}
         self.__pattern_subscribes = {}
         self.__ping_topic = f"ping/{self.__mqtt_config['identifier']}"
@@ -67,6 +68,7 @@ class DMAioMqttClient:
     async def __connect(self) -> None:
         self.__client = aiomqtt.Client(**self.__mqtt_config)
         await self.__client.__aenter__()
+        self.__reconnect_counter = 0
         self.__logger.info("Connected!")
 
     async def __connect_loop(self) -> None:
@@ -79,7 +81,9 @@ class DMAioMqttClient:
                 _ = asyncio.create_task(self.__listen())
                 return
             except Exception as e:
-                self.__logger.error(f"Connection error: {e}.\nReconnecting...")
+                if self.__reconnect_counter < 1:
+                    self.__logger.error(f"Connection error: {e}.\nReconnecting...")
+                self.__reconnect_counter += 1
                 await asyncio.sleep(self.__ping_interval_s)
 
     async def __disconnect(self) -> None:
