@@ -66,6 +66,7 @@ class DMAioMqttClient:
                 async with aiomqtt.Client(**self.__mqtt_config) as self.__client:
                     self.__logger.info("Connected!")
                     self.__connected_event.set()
+                    await self.__subscribe()
                     await self.__listen()
             except Exception as e:
                 if self.__connected_event.is_set():
