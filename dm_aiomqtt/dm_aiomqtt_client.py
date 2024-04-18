@@ -31,9 +31,9 @@ class DMAioMqttClient:
         ca_crt: str = "",
         client_crt: str = "",
         client_key: str = "",
-        identifier: str = None,
         keepalive: int = 5,
-        clean_session: bool = False
+        identifier: str = None,
+        clean_session: bool = True
     ) -> None:
         if self.__logger is None:
             self.__logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
@@ -42,9 +42,10 @@ class DMAioMqttClient:
             "hostname": host,
             "port": port,
             "keepalive": keepalive,
-            "clean_session": clean_session,
-            "identifier": identifier or str(uuid.uuid4())
+            "clean_session": clean_session
         }
+        if identifier:
+            self.__mqtt_config["identifier"] = identifier
         if username or password:
             self.__mqtt_config["username"] = username
             self.__mqtt_config["password"] = password
