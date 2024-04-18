@@ -7,25 +7,6 @@
 
 ## Usage
 
-### Warning
-
-For correct operation of the client, **_readwrite_** access to `ping/#` topic is **REQUIRED**.
-Improved system for responding to loss of connection, will use this topic to send **ping** messages.
-
-(Format of ping messages - topic: `ping/[uuid4]`, payload: `1`)
-
-### Run in Windows
-
-_If you run async code in **Windows**, set correct selector_
-
-```python
-import asyncio
-import sys
-
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-```
-
 ### Example
 
 ```python
@@ -36,7 +17,7 @@ import asyncio
 # create handler for 'test' topic
 async def test_topic_handler(publish: DMAioMqttClient.publish, topic: str, payload: str) -> None:
     print(f"Received message from {topic}: {payload}")
-    await publish("test/success", payload=True)
+    publish("test/success", payload=True)
 
 
 async def main():
@@ -50,7 +31,7 @@ async def main():
     await mqtt_client.start()
 
     # publish
-    await mqtt_client.publish("test", payload="Hello World!", sent_logging=True)
+    mqtt_client.publish("test", payload="Hello World!", sent_logging=True)
 
     # other code (for example, endless waiting)
     await asyncio.Event().wait()
@@ -65,13 +46,23 @@ if __name__ == "__main__":
 * NOT required client certificate
 
    ```python
-   mqtt_client = DMAioMqttClient("localhost", 8883, ca_crt="ca.crt")
+   mqtt_client = DMAioMqttClient(
+       host="localhost",
+       port=8883,
+       ca_crt="ssl/ca.crt"
+   )
    ```
 
 * REQUIRED client certificate
 
    ```python
-   mqtt_client = DMAioMqttClient("localhost", 8883, ca_crt="ca.crt", client_crt="client.crt", client_key="client.key")
+   mqtt_client = DMAioMqttClient(
+       host="localhost",
+       port=8883,
+       ca_crt="ssl/ca.crt",
+       client_crt="ssl/client.crt",
+       client_key="ssl/client.key"
+   )
    ```
 
 ### Set custom logger
@@ -110,4 +101,16 @@ DMAioMqttClient.set_logger(MyLogger())
 | `qos`             | `0` \| `1` \| `2`  | `True`        | MQTT QoS                                  |
 | `payload_to_json` | `bool` \| `"auto"` | `True`        | Whether to convert content to JSON        |
 | `sent_logging`    | `bool`             | `False`       | Whether to print the sending notification |
-| `warn_logging`    | `bool`             | `False`       | Whether to print a send error warning     |
+| `error_logging`   | `bool`             | `False`       | Whether to print a send error warning     |
+
+### Run in Windows
+
+_If you run async code in **Windows**, set correct selector_
+
+```python
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+```

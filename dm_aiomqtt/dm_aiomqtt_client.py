@@ -31,121 +31,77 @@ class DMAioMqttClient:
         ca_crt: str = "",
         client_crt: str = "",
         client_key: str = "",
-        ping_interval_s: int = 5,
-        clean_session: bool = True
+        identifier: str = None,
+        keepalive: int = 5,
+        clean_session: bool = False
     ) -> None:
         if self.__logger is None:
             self.__logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
 
-        self.__ping_interval_s = ping_interval_s if ping_interval_s > 1 else 1
-
         self.__mqtt_config = {
             "hostname": host,
             "port": port,
-            "keepalive": self.__ping_interval_s * 3,
+            "keepalive": keepalive,
             "clean_session": clean_session,
-            "identifier": str(uuid.uuid4())
+            "identifier": identifier or str(uuid.uuid4())
         }
         if username or password:
             self.__mqtt_config["username"] = username
             self.__mqtt_config["password"] = password
         self.__mqtt_config["tls_context"] = self.__get_tls_context(ca_crt, client_crt, client_key)
 
-        self.__reconnect_timeout = self.__ping_interval_s * 2 + 1
-        self.__reconnect_timer_task = None
-        self.__is_reconnect = False
-        self.__reconnect_counter = 0
         self.__subscribes = {}
         self.__pattern_subscribes = {}
-        self.__ping_topic = f"ping/{self.__mqtt_config['identifier']}"
-        self.add_topic_handler(self.__ping_topic, self.__reset_reconnect_timer_task)
-        self.__client: aiomqtt.Client = None
+        self.__client: aiomqtt.Client = aiomqtt.Client(**self.__mqtt_config)
+        self.__connected_event = asyncio.Event()
 
     async def start(self) -> None:
-        await self.__connect_loop()
-        _ = asyncio.create_task(self.__ping_loop())
-
-    async def __connect(self) -> None:
-        self.__client = aiomqtt.Client(**self.__mqtt_config)
-        await self.__client.__aenter__()
-        self.__reconnect_counter = 0
-        self.__logger.info("Connected!")
+        _ = asyncio.create_task(self.__connect_loop())
+        await self.__connected_event.wait()
 
     async def __connect_loop(self) -> None:
         while True:
             try:
-                await self.__connect()
-                self.__is_reconnect = False
-                self.__reconnect_timer_task = asyncio.create_task(self.__reconnect_timer())
-                await self.__subscribe()
-                _ = asyncio.create_task(self.__listen())
-                return
+                async with aiomqtt.Client(**self.__mqtt_config) as self.__client:
+                    self.__logger.info("Connected!")
+                    self.__connected_event.set()
+                    await self.__listen()
             except Exception as e:
-                if self.__reconnect_counter < 1:
-                    self.__logger.error(f"Connection error: {e}.\nReconnecting...")
-                self.__reconnect_counter += 1
-                await asyncio.sleep(self.__ping_interval_s)
-
-    async def __disconnect(self) -> None:
-        try:
-            await self.__client.__aexit__(None, None, None)
-        except:
-            pass
-
-    async def __reconnect(self) -> None:
-        self.__reconnect_timer_task.cancel()
-        if self.__is_reconnect:
-            return
-        self.__is_reconnect = True
-        await self.__disconnect()
-        await self.__connect_loop()
-
-    async def __reset_reconnect_timer_task(self, *args, **kwargs) -> None:
-        self.__reconnect_timer_task.cancel()
-        self.__reconnect_timer_task = asyncio.create_task(self.__reconnect_timer())
-
-    async def __reconnect_timer(self) -> None:
-        await asyncio.sleep(self.__reconnect_timeout)
-        await self.__reconnect()
-
-    async def __ping_loop(self) -> None:
-        while True:
-            await self.publish(self.__ping_topic, 1)
-            await asyncio.sleep(self.__ping_interval_s)
+                if self.__connected_event.is_set():
+                    self.__logger.error(f"Error: {e}")
+                self.__connected_event.clear()
+                self.__connecting = False
 
     async def __listen(self) -> None:
-        try:
-            async for message in self.__client.messages:
-                topic = message.topic.value
-                payload = message.payload.decode('utf-8')
+        async for message in self.__client.messages:
+            topic = message.topic.value
+            payload = message.payload.decode('utf-8')
 
-                callbacks = self.__get_callbacks_from_pattern_subscribes(topic)
-                topic_params = self.__subscribes.get(topic)
-                if isinstance(topic_params, dict):
-                    callbacks.append(topic_params["cb"])
+            callbacks = self.__get_callbacks_from_pattern_subscribes(topic)
+            topic_params = self.__subscribes.get(topic)
+            if isinstance(topic_params, dict):
+                callbacks.append(topic_params["cb"])
 
-                for callback in callbacks:
-                    if isinstance(callback, Callable):
-                        _ = asyncio.create_task(callback(self.publish, topic, payload))
-                    else:
-                        self.__logger.error(f"Callback is not a Callable object: {type(callback)}, {topic=}")
-        except Exception as e:
-            self.__logger.error(f"Connection error: {e}")
-            await self.__reconnect()
+            for callback in callbacks:
+                if isinstance(callback, Callable):
+                    _ = asyncio.create_task(callback(self.publish, topic, payload))
+                else:
+                    self.__logger.error(f"Callback is not a Callable object: {type(callback)}, {topic=}")
 
-    def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
-        if current_topic == self.__ping_topic:
-            return []
+    def add_topic_handler(self, topic: str, callback: _SUBSCRIBE_CALLBACK_TYPE, qos: _QOS_TYPE = 0) -> None:
+        """
+        callback EXAMPLE:
+            async def test_topic_handler(publish: DMAioMqttClient.publish, topic: str, payload: str) -> None:
+               print(f"Received message from {topic}: {payload}")
+               publish("test/success", payload=True)
+        """
+        new_item = {"cb": callback, "qos": qos}
+        self.__subscribes[topic] = new_item
 
-        callbacks = []
-        for topic, params in self.__pattern_subscribes.items():
-            pattern = topic.replace("+", "[^/]+?")
-            pattern = pattern.replace("/#", "(/.+)*")
-            if re.search(pattern, current_topic):
-                callbacks.append(params["cb"])
-        return callbacks
+        if re.search(r"[+#]", topic):
+            self.__pattern_subscribes[topic] = new_item
 
-    async def publish(
+    def publish(
         self,
         topic: str,
         payload: Union[str, int, float, dict, list, bool, None],
@@ -153,7 +109,7 @@ class DMAioMqttClient:
         *,
         payload_to_json: Union[bool, Literal["auto"]] = "auto",
         sent_logging: bool = False,
-        warn_logging: bool = False,
+        error_logging: bool = False,
     ) -> None:
         """
         payload_to_json (bool, "auto"):
@@ -164,29 +120,30 @@ class DMAioMqttClient:
             - False:
                 will not be converted
         """
-        if payload_to_json is True or (payload_to_json == "auto" and type(payload) not in (str, int, float)):
-            payload = json.dumps(payload, ensure_ascii=False)
-        try:
-            await self.__client.publish(topic, payload, qos)
-        except Exception as e:
-            if warn_logging:
-                self.__logger.warning(f"Publish not sent: {e}")
-        else:
-            if sent_logging:
-                self.__logger.debug(f"Published message to '{topic}' topic ({qos=}): {payload}")
 
-    def add_topic_handler(self, topic: str, callback: _SUBSCRIBE_CALLBACK_TYPE, qos: _QOS_TYPE = 0) -> None:
-        """
-        callback EXAMPLE:
-            async def test_topic_handler(publish: DMAioMqttClient.publish, topic: str, payload: str) -> None:
-               print(f"Received message from {topic}: {payload}")
-               await publish("test/success", payload=True)
-        """
-        new_item = {"cb": callback, "qos": qos}
-        self.__subscribes[topic] = new_item
+        async def cb(payload):
+            if payload_to_json is True or (payload_to_json == "auto" and type(payload) not in (str, int, float)):
+                payload = json.dumps(payload, ensure_ascii=False)
+            try:
+                await self.__connected_event.wait()
+                await self.__client.publish(topic, payload, qos)
+            except Exception as e:
+                if error_logging:
+                    self.__logger.warning(f"Publish not sent: {e}")
+            else:
+                if sent_logging:
+                    self.__logger.debug(f"Published message to '{topic}' topic ({qos=}): {payload}")
 
-        if re.search(r"[+#]", topic):
-            self.__pattern_subscribes[topic] = new_item
+        _ = asyncio.create_task(cb(payload))
+
+    def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
+        callbacks = []
+        for topic, params in self.__pattern_subscribes.items():
+            pattern = topic.replace("+", "[^/]+?")
+            pattern = pattern.replace("/#", "(/.+)*")
+            if re.search(pattern, current_topic):
+                callbacks.append(params["cb"])
+        return callbacks
 
     async def __subscribe(self) -> None:
         for topic, params in self.__subscribes.items():
