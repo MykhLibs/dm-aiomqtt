@@ -42,8 +42,6 @@ class MessageDB:
         self._file_mng = AioFileManager()
 
     async def insert(self, record: list) -> None:
-        iso_dt = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-        record.append(iso_dt)
         await self._file_mng.write_jsonl(self._filename, record)
 
     async def get_all(self) -> List[list]:

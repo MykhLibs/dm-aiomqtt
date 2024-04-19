@@ -3,3 +3,4 @@
 **/venv
 **/logs
 **/*.log*
+**/.mqtt_msg_db.jsonl

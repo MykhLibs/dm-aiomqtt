@@ -148,8 +148,7 @@ class DMAioMqttClient:
 
     async def __resend_not_success_messages(self) -> None:
         messages = await self.__message_db.get_all()
-        for topic, payload, qos, iso_dt in messages:
-            payload = f"{payload}_dt_{iso_dt}"
+        for topic, payload, qos in messages:
             self.publish(topic, payload, qos)
 
     def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
