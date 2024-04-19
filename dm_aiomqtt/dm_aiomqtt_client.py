@@ -132,7 +132,7 @@ class DMAioMqttClient:
 
         async def cb(payload):
             if payload_to_json is True or (payload_to_json == "auto" and type(payload) not in (str, int, float)):
-                payload = json.dumps(payload, ensure_ascii=False)
+                payload = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
             try:
                 await self.__client.publish(topic, payload, qos)
             except Exception as e:
