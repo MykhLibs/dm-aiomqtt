@@ -3,10 +3,10 @@ from typing import Union, Callable, Coroutine, Literal, List, Optional
 import asyncio
 import aiomqtt
 import json
-import uuid
 import ssl
 import re
 import os
+from .message_db import MessageDB
 
 
 class DMAioMqttClient:
@@ -33,7 +33,8 @@ class DMAioMqttClient:
         client_key: str = "",
         keepalive: int = 5,
         identifier: str = None,
-        clean_session: bool = True
+        clean_session: bool = True,
+        resend_not_success_messages: bool = False
     ) -> None:
         if self.__logger is None:
             self.__logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
@@ -53,6 +54,9 @@ class DMAioMqttClient:
 
         self.__subscribes = {}
         self.__pattern_subscribes = {}
+        self.__resend_ns_msg = resend_not_success_messages
+        self.__message_db = MessageDB()
+
         self.__client: aiomqtt.Client = aiomqtt.Client(**self.__mqtt_config)
         self.__connected_event = asyncio.Event()
 
@@ -66,6 +70,9 @@ class DMAioMqttClient:
                 async with aiomqtt.Client(**self.__mqtt_config) as self.__client:
                     self.__logger.info("Connected!")
                     self.__connected_event.set()
+
+                    if self.__resend_ns_msg:
+                        await self.__resend_not_success_messages()
                     await self.__subscribe()
                     await self.__listen()
             except Exception as e:
@@ -127,9 +134,10 @@ class DMAioMqttClient:
             if payload_to_json is True or (payload_to_json == "auto" and type(payload) not in (str, int, float)):
                 payload = json.dumps(payload, ensure_ascii=False)
             try:
-                await self.__connected_event.wait()
                 await self.__client.publish(topic, payload, qos)
             except Exception as e:
+                if self.__resend_ns_msg:
+                    await self.__message_db.insert([topic, payload, qos])
                 if error_logging:
                     self.__logger.warning(f"Publish not sent: {e}")
             else:
@@ -137,6 +145,12 @@ class DMAioMqttClient:
                     self.__logger.debug(f"Published message to '{topic}' topic ({qos=}): {payload}")
 
         _ = asyncio.create_task(cb(payload))
+
+    async def __resend_not_success_messages(self) -> None:
+        messages = await self.__message_db.get_all()
+        for topic, payload, qos, iso_dt in messages:
+            payload = f"{payload}_dt_{iso_dt}"
+            self.publish(topic, payload, qos)
 
     def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
         callbacks = []

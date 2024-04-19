@@ -1,3 +1,4 @@
 # Python 3.8
 dm-logger==0.5.2
 aiomqtt==2.0.1
+aiofiles==23.2.1
