@@ -78,12 +78,14 @@ Set this parameter `resend_not_success_messages=True` when create mqtt client
    ```
 
 Now, in case of loss of connection, all messages that were sent during this period will be re-sent as soon as the connection appears again.
+<br>
 **BUT** the `payload` will be in a changed format `[your_payload]_dt_[iso_local_datetime]`
 
 **Example**:
+<br>
 Your payload: `"{"temp": 12}"`
+<br>
 Edited payload: `"{"temp": 12}_dt_2024-04-19T09:57:40"`
-
 
 ### Set custom logger
 
