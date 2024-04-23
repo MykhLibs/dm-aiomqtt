@@ -18,7 +18,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         'dm-logger==0.5.2',
-        'aiomqtt==2.0.0'
+        'aiomqtt==2.0.0',
+        'aiofiles==23.2.1'
     ],
     classifiers=[
         'Programming Language :: Python :: 3.8',
