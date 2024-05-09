@@ -20,6 +20,10 @@ class DMAioMqttClient:
     _LOG_FN_TYPE = Callable[[str], None]
     _QOS_TYPE = Literal[0, 1, 2]
 
+    __protocol_versions = {3: aiomqtt.ProtocolVersion.V31,
+                           4: aiomqtt.ProtocolVersion.V311,
+                           5: aiomqtt.ProtocolVersion.V5}
+    __default_version = 4
     __logger = None
 
     def __init__(
@@ -28,12 +32,13 @@ class DMAioMqttClient:
         port: int,
         username: str = "",
         password: str = "",
+        version: int = 4,  # 3 => v3.1;  4 => v3.1.1;  5 => v5
         ca_crt: str = "",
         client_crt: str = "",
         client_key: str = "",
         keepalive: int = 5,
         identifier: str = None,
-        clean_session: bool = True,
+        clean_session: Optional[bool] = None,  # not supported for v5 (for v5 by default => CLEAN_START=FIRST_ONLY)
         resend_not_success_messages: bool = False
     ) -> None:
         if self.__logger is None:
@@ -45,6 +50,17 @@ class DMAioMqttClient:
             "keepalive": keepalive,
             "clean_session": clean_session
         }
+        if version not in self.__protocol_versions:
+            default_protocol = self.__protocol_versions[self.__default_version]
+            self.__mqtt_config["protocol"] = default_protocol
+            self.__logger.warning(f"Invalid protocol version: '{version}'! "
+                                  f"Used default version: {self.__default_version} ({default_protocol})")
+        else:
+            self.__mqtt_config["protocol"] = self.__protocol_versions[version]
+
+        if self.__mqtt_config["protocol"] == aiomqtt.ProtocolVersion.V5:
+            self.__mqtt_config["clean_session"] = None
+
         if identifier:
             self.__mqtt_config["identifier"] = identifier
         if username or password:
@@ -107,7 +123,7 @@ class DMAioMqttClient:
         new_item = {"cb": callback, "qos": qos}
         self.__subscribes[topic] = new_item
 
-        if re.search(r"[+#]", topic):
+        if re.search(r"[+#$]", topic):
             self.__pattern_subscribes[topic] = new_item
 
     def publish(
@@ -154,6 +170,8 @@ class DMAioMqttClient:
     def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
         callbacks = []
         for topic, params in self.__pattern_subscribes.items():
+            if topic[0] == "$":
+                topic = "/".join(topic.split("/")[2:])
             pattern = topic.replace("+", "[^/]+?")
             pattern = pattern.replace("/#", "(/.+)*")
             if re.search(pattern, current_topic):
