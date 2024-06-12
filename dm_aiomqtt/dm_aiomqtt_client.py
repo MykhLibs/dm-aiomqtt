@@ -78,6 +78,9 @@ class DMAioMqttClient:
         _ = asyncio.create_task(self.__connect_loop())
         await self.__connected_event.wait()
 
+    async def start_forever(self) -> None:
+        await self.__connect_loop()
+
     async def __connect_loop(self) -> None:
         while True:
             try:
