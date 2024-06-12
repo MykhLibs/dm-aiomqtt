@@ -16,8 +16,6 @@ class DMAioMqttClient:
         https://github.com/DIMKA4621/dm-aiomqtt
     """
     _SUBSCRIBE_CALLBACK_TYPE = Callable[["DMAioMqttClient.publish", str, str], Coroutine]
-    _TEMP_CALLBACK_TYPE = Callable[["DMAioMqttClient.publish"], Coroutine]
-    _LOG_FN_TYPE = Callable[[str], None]
     _QOS_TYPE = Literal[0, 1, 2]
 
     __protocol_versions = {3: aiomqtt.ProtocolVersion.V31,
@@ -124,7 +122,11 @@ class DMAioMqttClient:
         self.__subscribes[topic] = new_item
 
         if re.search(r"[+#$]", topic):
-            self.__pattern_subscribes[topic] = new_item
+            if topic[0] == "$":
+                topic = "/".join(topic.split("/")[2:])
+            topic_pattern = topic.replace("+", "[^/]+?")
+            topic_pattern = topic_pattern.replace("/#", "(/.+)*")
+            self.__pattern_subscribes[f"^{topic_pattern}"] = new_item
 
     def publish(
         self,
@@ -169,12 +171,8 @@ class DMAioMqttClient:
 
     def __get_callbacks_from_pattern_subscribes(self, current_topic: str) -> List[Callable]:
         callbacks = []
-        for topic, params in self.__pattern_subscribes.items():
-            if topic[0] == "$":
-                topic = "/".join(topic.split("/")[2:])
-            pattern = topic.replace("+", "[^/]+?")
-            pattern = pattern.replace("/#", "(/.+)*")
-            if re.search(pattern, current_topic):
+        for topic_pattern, params in self.__pattern_subscribes.items():
+            if re.search(topic_pattern, current_topic):
                 callbacks.append(params["cb"])
         return callbacks
 
