@@ -28,7 +28,7 @@ setup(
     ],
     keywords='dm aiomqtt',
     project_urls={
-        'GitHub': 'https://github.com/DIMKA4621/dm-aiomqtt'
+        'GitHub': 'https://github.com/MykhLibs/dm-aiomqtt'
     },
     python_requires='>=3.8'
 )

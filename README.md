@@ -3,7 +3,7 @@
 ## Urls
 
 * [PyPI](https://pypi.org/project/dm-aiomqtt)
-* [GitHub](https://github.com/DIMKA4621/dm-aiomqtt)
+* [GitHub](https://github.com/MykhLibs/dm-aiomqtt)
 
 ## Usage
 
