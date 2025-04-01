@@ -71,15 +71,19 @@ class DMAioMqttClient:
         self.__resend_ns_msg = resend_not_success_messages
         self.__message_db = MessageDB()
 
-        self.__client: aiomqtt.Client = aiomqtt.Client(**self.__mqtt_config)
-        self.__connected_event = asyncio.Event()
+        self.__client = None
+        self.__connected_event = None
 
     async def start(self) -> None:
+        self.__client = aiomqtt.Client(**self.__mqtt_config)
+        self.__connected_event = asyncio.Event()
+
         _ = asyncio.create_task(self.__connect_loop())
         await self.__connected_event.wait()
 
     async def start_forever(self) -> None:
-        await self.__connect_loop()
+        await self.start()
+        await asyncio.Event().wait()
 
     async def __connect_loop(self) -> None:
         while True:
