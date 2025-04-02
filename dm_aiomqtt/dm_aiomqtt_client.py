@@ -23,6 +23,7 @@ class DMAioMqttClient:
                            5: aiomqtt.ProtocolVersion.V5}
     __default_version = 4
     __logger = None
+    __logger_params = None
 
     def __init__(
         self,
@@ -40,7 +41,10 @@ class DMAioMqttClient:
         resend_not_success_messages: bool = False
     ) -> None:
         if self.__logger is None:
-            self.__logger = DMLogger(f"DMAioMqttClient-{host}:{port}")
+            params = {"name": f"DMAioMqttClient-{host}:{port}"}
+            if isinstance(self.__logger_params, dict):
+                params.update(self.__logger_params)
+            self.__logger = DMLogger(**params)
 
         self.__mqtt_config = {
             "hostname": host,
@@ -192,12 +196,12 @@ class DMAioMqttClient:
     def __get_tls_context(self, ca_crt: str, client_crt: str, client_key: str) -> Optional[ssl.SSLContext]:
         if not ca_crt and (client_crt or client_key):
             self.__logger.error("ca_crt file is not specified!")
-            return
+            return None
 
         if ca_crt:
             if not os.path.exists(ca_crt):
                 self.__logger.error(f"'ca_crt' file '{ca_crt}' file not found!")
-                return
+                return None
             tls_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca_crt)
 
             if client_crt and client_key:
@@ -213,12 +217,6 @@ class DMAioMqttClient:
             return tls_context
 
     @classmethod
-    def set_logger(cls, logger) -> None:
-        if (hasattr(logger, "debug") and isinstance(logger.debug, Callable) and
-            hasattr(logger, "info") and isinstance(logger.info, Callable) and
-            hasattr(logger, "warning") and isinstance(logger.warning, Callable) and
-            hasattr(logger, "error") and isinstance(logger.error, Callable)
-        ):
-            cls.__logger = logger
-        else:
-            print("Invalid logger")
+    def set_logger_params(cls, extra_params = None) -> None:
+        if isinstance(extra_params, dict) or extra_params is None:
+            cls.__logger_params = extra_params

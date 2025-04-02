@@ -87,30 +87,26 @@ Now, in case of loss of connection, all messages that were sent during this peri
 
 ### Set custom logger
 
-_If you want set up custom logger_
+_If you want set up custom logger parameters_
 
 ```python
 from dm_aiomqtt import DMAioMqttClient
-
-
-# create custom logger
-class MyLogger:
-    def debug(self, message):
-        pass
-
-    def info(self, message):
-        pass
-
-    def warning(self, message):
-        print(message)
-
-    def error(self, message):
-        print(message)
+from dm_logger import FormatterConfig
 
 
 # set up custom logger for all clients
-DMAioMqttClient.set_logger(MyLogger())
+DMAioMqttClient.set_logger_params(
+   {
+      "name": "my_name",
+      "formatter_config": FormatterConfig(
+         show_datetime=False,
+      )
+   }
+)
 ```
+
+See more about DMLogger [here](https://github.com/MykhLibs/dm-logger)
+
 
 ### Publish method parameters
 
